@@ -214,29 +214,4 @@ public class MainActivity extends Activity {
 
     }
     
-    @Override
-	protected void onDestroy() {
-		if (locationClient != null)
-			locationClient.stop();
-		if (mapManager != null) {
-			mapManager.destroy();
-			mapManager = null;
-		}
-		super.onDestroy();
-	}
-
-	@Override
-	protected void onPause() {
-		if (mapManager != null)
-			mapManager.stop();
-		super.onPause();
-	}
-
-	@Override
-	protected void onResume() {
-		if (mapManager != null)
-			mapManager.start();
-		super.onResume();
-	}
-	
 }

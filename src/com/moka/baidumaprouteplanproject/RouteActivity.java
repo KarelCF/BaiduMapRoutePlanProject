@@ -1,5 +1,6 @@
 package com.moka.baidumaprouteplanproject;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 import com.baidu.location.LocationClient;
@@ -11,12 +12,15 @@ import com.baidu.mapapi.map.MapController;
 import com.baidu.mapapi.map.MapView;
 import com.baidu.mapapi.map.MyLocationOverlay;
 import com.baidu.mapapi.map.OverlayItem;
-import com.baidu.mapapi.map.PoiOverlay;
+import com.baidu.mapapi.map.RouteOverlay;
+import com.baidu.mapapi.search.MKDrivingRouteResult;
+import com.baidu.mapapi.search.MKPlanNode;
 import com.baidu.mapapi.search.MKSearch;
 import com.baidu.platform.comapi.basestruct.GeoPoint;
 import com.moka.baidumaprouteplanproject.application.MainApplication;
 import com.moka.baidumaprouteplanproject.entity.Poi;
 import com.moka.baidumaprouteplanproject.listener.MyLocationListener;
+import com.moka.baidumaprouteplanproject.listener.RouteSearchListener;
 import com.moka.baidumaprouteplanproject.util.PoiListUtil;
 
 import android.app.Activity;
@@ -25,6 +29,8 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.view.View;
+import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,7 +40,9 @@ public class RouteActivity extends Activity {
 	private List<Poi> pois;
 	private int poiIndex;
 	private Poi targetPoi;
-	private RouteActivityHandler handler = new RouteActivityHandler();
+	private RouteActivityHandler routeActivityHandler = new RouteActivityHandler(this);
+	private DrawRouteHandler drawRouteHandler = new DrawRouteHandler(this);
+	
 	
 	private TextView poiNameTextView = null;
 	private TextView poiAddressTextView = null;
@@ -46,7 +54,6 @@ public class RouteActivity extends Activity {
 	private MKSearch mkSearch = null;
 	
 	
-	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
@@ -55,7 +62,8 @@ public class RouteActivity extends Activity {
 		getInfoFromMainActivity();
 		initRouteAivityView();
 		initLocationService();
-		drawTargetPoint();
+		searchRoute();
+//		drawTargetPoint();
 		fillInTargetPointInfo();
 	}
 	
@@ -70,21 +78,26 @@ public class RouteActivity extends Activity {
 		poiNameTextView = (TextView) findViewById(R.id.poiNameTextView); 
 		poiAddressTextView = (TextView) findViewById(R.id.poiAddressTextView); 
 		choosePoiBtn = (Button) findViewById(R.id.choosePoiBtn); 
+		choosePoiBtn.setOnClickListener(new OnClickListener() {
+			
+			@Override
+			public void onClick(View v) {
+				//TODO
+			}
+		});
 		mapView = (MapView) findViewById(R.id.mapView); 
 		mapController = mapView.getController();
-		mapController.setZoom(15);
+		mapController.setZoom(14);
 		
 	}	
 	
 	// 定位相关
 	public static GeoPoint myGeoPoint = null;
-	public MyLocationListener myLocationListener = new MyLocationListener(this.handler);
+	public MyLocationListener myLocationListener = new MyLocationListener(routeActivityHandler);
 	private LocationClient locationClient = null;
 	private LocationData locationData = null;
 	//定位图层
 	private MyLocationOverlay myLocationOverlay = null;
-	//是否首次定位
-	private boolean isFirstLoc = true;
 	
 	private void initLocationService() {
 		// 定位初始化
@@ -107,57 +120,111 @@ public class RouteActivity extends Activity {
   		myLocationOverlay.enableCompass();
   		//修改定位数据后刷新图层生效
   		mapView.refresh();
-        // 搜索初始化
-        mkSearch = new MKSearch();
+  		
 	}
 	
-	private void drawTargetPoint() {
-		GeoPoint targetPoint = targetPoi.getPoiGeoPoint();
-		OverlayItem targetOverlayItem = new OverlayItem(targetPoint, null, null);
-		 
-        // 创建图标资源（用于显示在overlayItem所标记的位置） 
-        Drawable marker = this.getResources().getDrawable(R.drawable.pic_target_point_32);  
-        // 为maker定义位置和边界  
-        marker.setBounds(0, 0, marker.getIntrinsicWidth(), marker.getIntrinsicHeight());  
-		// 目的地图层
-		ItemizedOverlay targetOverlay = new ItemizedOverlay<OverlayItem>(marker, mapView);
-		targetOverlay.addItem(targetOverlayItem);
-		mapView.getOverlays().add(targetOverlay);
-		mapView.refresh();
+	private RouteSearchListener routeSearchListener = new RouteSearchListener(drawRouteHandler);
+	
+	private void searchRoute() {
+		// 设置起始与结束点
+		MKPlanNode startNode = new MKPlanNode();
+        MKPlanNode endNode = new MKPlanNode();
+        startNode.pt = myGeoPoint;
+        endNode.pt = targetPoi.getPoiGeoPoint();
+		// 搜索初始化
+        mkSearch = new MKSearch();
+        mkSearch.init(mapManager, routeSearchListener);
+        mkSearch.setDrivingPolicy(MKSearch.ECAR_TIME_FIRST);
+        mkSearch.drivingSearch(null, startNode, null, endNode);
 	}
+	
+	
+//	private void drawTargetPoint() {
+//		GeoPoint targetPoint = targetPoi.getPoiGeoPoint();
+//		OverlayItem targetOverlayItem = new OverlayItem(targetPoint, null, null);
+//		 
+//        // 创建图标资源（用于显示在overlayItem所标记的位置） 
+//        Drawable marker = this.getResources().getDrawable(R.drawable.pic_target_point_32);  
+//        // 为maker定义位置和边界  
+//        marker.setBounds(0, 0, marker.getIntrinsicWidth(), marker.getIntrinsicHeight());  
+//		// 目的地图层
+//		ItemizedOverlay targetOverlay = new ItemizedOverlay<OverlayItem>(marker, mapView);
+//		targetOverlay.addItem(targetOverlayItem);
+//		mapView.getOverlays().add(targetOverlay);
+//		mapView.refresh();
+//	}
 	
 	private void fillInTargetPointInfo() {
 		this.poiNameTextView.setText(targetPoi.getPoiName());
 		this.poiAddressTextView.setText(targetPoi.getPoiAddress() + "\n" + targetPoi.getPoiTelephoneNo());
 	}
 	
-	private class RouteActivityHandler extends Handler {
-		
+	private static class RouteActivityHandler extends Handler {
+		// 持有弱引用，消除因Handler类设置static关键字而产生的"This Handler class should be static or leaks might occur"警告
+    	private WeakReference<RouteActivity> weakReference;
+    	private RouteActivity routeActivity;
+    	
 		private static final int GET_LOCATION = 0;
+		
+		private RouteActivityHandler(RouteActivity activity) {
+    		weakReference = new WeakReference<RouteActivity>(activity);
+        }
 		
 		@Override
 		public void handleMessage(Message msg) {
+			routeActivity = weakReference.get();
 			switch(msg.what) {
 			case GET_LOCATION:
 				//更新定位数据
-				locationData = (LocationData) msg.obj;
-		        myLocationOverlay.setData(locationData);
+				routeActivity.locationData = (LocationData) msg.obj;
+				routeActivity.myLocationOverlay.setData(routeActivity.locationData);
 		        //更新图层数据执行刷新后生效
-		        mapView.refresh();
+				routeActivity.mapView.refresh();
 		    	//移动地图到定位点
-	            if (isFirstLoc) {
-	            	Toast.makeText(RouteActivity.this, "正在定位...", Toast.LENGTH_SHORT).show();
-	            	myGeoPoint = myLocationListener.getMyGeoPoint();
-	                mapController.animateTo(myGeoPoint);
-	                locationClient.stop();
-	            }
-	            //首次定位完成
-	            isFirstLoc = false;
+            	Toast.makeText(routeActivity, "正在定位...", Toast.LENGTH_SHORT).show();
+            	myGeoPoint = routeActivity.myLocationListener.getMyGeoPoint();
+            	routeActivity.mapController.animateTo(myGeoPoint);
+            	routeActivity.locationClient.stop();
+            	routeActivity.searchRoute();
 	            break;
 			}
 		}
 		
 	}
+	
+	private static class DrawRouteHandler extends Handler {
+		// 持有弱引用，消除因Handler类设置static关键字而产生的"This Handler class should be static or leaks might occur"警告
+    	private WeakReference<RouteActivity> weakReference;
+    	private RouteActivity routeActivity;
+    	
+		private static final int GET_ROUTE = 1;
+		
+		private DrawRouteHandler(RouteActivity activity) {
+    		weakReference = new WeakReference<RouteActivity>(activity);
+        }
+		
+		@Override
+		public void handleMessage(Message msg) {
+			routeActivity = weakReference.get();
+			switch(msg.what) {
+			case GET_ROUTE:
+				drawRoute(msg);
+				break;
+			}
+		}
+		
+		private void drawRoute(Message message) {
+			MKDrivingRouteResult routes = (MKDrivingRouteResult) message.obj;
+			RouteOverlay routeOverlay = new RouteOverlay(routeActivity, routeActivity.mapView);
+			routeOverlay.setData(routes.getPlan(0).getRoute(0));
+			routeActivity.mapView.getOverlays().add(routeOverlay);
+			routeActivity.mapView.refresh();
+			// 使用zoomToSpan()绽放地图，使路线能完全显示在地图上
+			routeActivity.mapView.getController().zoomToSpan(routeOverlay.getLatSpanE6(), routeOverlay.getLonSpanE6());
+		}
+		
+	}
+	
 	
 	@Override
 	protected void onDestroy() {
@@ -178,5 +245,18 @@ public class RouteActivity extends Activity {
 		mapView.onResume();
 		super.onResume();
 	}
+	
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+    	super.onSaveInstanceState(outState);
+    	mapView.onSaveInstanceState(outState);
+    	
+    }
+    
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+    	super.onRestoreInstanceState(savedInstanceState);
+    	mapView.onRestoreInstanceState(savedInstanceState);
+    }
 	
 }
